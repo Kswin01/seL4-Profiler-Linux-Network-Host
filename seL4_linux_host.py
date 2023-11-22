@@ -2,8 +2,11 @@ import socket
 import sys
 import threading
 import os
+
 client_ip = "172.16.1.9"
 client_port = 1236
+
+stop_recv = 0
 
 class ProfilerClient:
     """
@@ -16,7 +19,7 @@ class ProfilerClient:
         self.hostname = hostname
         self.port = port
         self.socket = None
-        self.recvThread = None
+        self.recv_thread = None
         self.f = None
 
     def send_command(self, cmd):
@@ -53,32 +56,38 @@ class ProfilerClient:
                         + " ... invalid host or port?\n")
             sys.exit(1)
         
+        
         data = self.socket.recv(1024).decode()
         print(str(data))
+
 
     def recv_samples_thread(self):
         while True:
             # receive data stream. it won't accept data packet greater than 1024 bytes
-            data = self.socket.recv(1024).decode()
-            print("Received samples over tcp\n")
-            print(str(data))
-            if str(data).endswith("QUIT"):
-                self.f.write(str(data)[:-4])
-
-                self.f.write("]\n}\n")
-                self.f.close()
-                return
-            else:
+            # global stop_recv
+            try:
+                data = self.socket.recv(1024).decode()
                 self.f.write(str(data))
+            except socket.error:
+                global stop_recv
+                if stop_recv:
+                    break
 
     def recv_samples(self, f):
         # Start the samples section of the json
-        self.recvThread = threading.Thread(target=self.recv_samples_thread, args=())
+        self.socket.settimeout(2)
+        global stop_recv
+        stop_recv = 0
+        self.recv_thread = threading.Thread(target=self.recv_samples_thread, args=())
+        self.recv_thread.daemon = True
         self.f = open("samples.json", "a")
-        self.recvThread.start()
+        self.recv_thread.start()
 
     def stop_samples(self):
-        self.recvThread.join()
+        global stop_recv
+        stop_recv = 1
+        # time.sleep(10)
+        self.recv_thread.join()
         self.f.close()
 
 
@@ -113,12 +122,12 @@ if __name__ == "__main__":
         elif user_input == "STOP":
             # Stop the recv thread and close file descriptor
             profClient.send_command("STOP")
-            f.close()
-            # recvThread.join()
+            profClient.stop_samples()
 
         elif user_input == "EXIT":
-            f = open("samples.json", "a")
             profClient.send_command("STOP")   
+            profClient.stop_samples()
+            f = open("samples.json", "a")
             f.write("]\n}\n")
             f.close()
             os._exit(1)
