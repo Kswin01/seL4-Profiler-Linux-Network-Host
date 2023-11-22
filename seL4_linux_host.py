@@ -133,7 +133,7 @@ if __name__ == "__main__":
             os._exit(1)
         
         else: 
-            print("These are the following valid commands:\n")
+            print("These are the following valid commands (case-agnostic):\n")
             print("\t1. \"CONNECT\" - This will attempt to connect to the supplied IP address and port. Connect will add the ")
             print("\t2. \"START\" - This will command the seL4 profiler to start measurements and construct samples.json file.")
             print("\t3. \"STOP\" - This will command the seL4 profiler to stop measurements.")
