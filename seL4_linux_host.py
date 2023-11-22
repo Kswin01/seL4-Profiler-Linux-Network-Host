@@ -1,20 +1,23 @@
 import socket
 import sys
-
-client_ip = "172.16.1.55"
+import threading
+import os
+client_ip = "172.16.1.9"
 client_port = 1236
 
 class ProfilerClient:
     """
     Class encpasulating the logic to control seL4 profiler over network.
-    We will also recieve samples on this client from the seL4 profiler.
+    We 
+    will also recieve samples on this client from the seL4 profiler.
     """
 
     def __init__(self, hostname, port):
         self.hostname = hostname
         self.port = port
         self.socket = None
-
+        self.recvThread = None
+        self.f = None
 
     def send_command(self, cmd):
         """
@@ -28,7 +31,7 @@ class ProfilerClient:
 
     def get_mappings(self, f):
         """
-        Get the mappings from pid to ELF
+        Get the mappings from pid to ELF names
         """
         self.send_command("MAPPINGS")
         f.write("{\n")
@@ -53,26 +56,83 @@ class ProfilerClient:
         data = self.socket.recv(1024).decode()
         print(str(data))
 
-    def recv(self, f):
+    def recv_samples_thread(self):
         while True:
             # receive data stream. it won't accept data packet greater than 1024 bytes
             data = self.socket.recv(1024).decode()
-            f.append(str(data))
+            print("Received samples over tcp\n")
+            print(str(data))
+            if str(data).endswith("QUIT"):
+                self.f.write(str(data)[:-4])
+
+                self.f.write("]\n}\n")
+                self.f.close()
+                return
+            else:
+                self.f.write(str(data))
+
+    def recv_samples(self, f):
+        # Start the samples section of the json
+        self.recvThread = threading.Thread(target=self.recv_samples_thread, args=())
+        self.f = open("samples.json", "a")
+        self.recvThread.start()
+
+    def stop_samples(self):
+        self.recvThread.join()
+        self.f.close()
+
 
 if __name__ == "__main__":
-    f = open("samples.json", "w")
+    # Intially, we want to create client object
     profClient = ProfilerClient(client_ip, client_port)
-    profClient.connect()
+    print("seL4 Profiler Network Client. Please enter command:")
 
-    profClient.get_mappings(f)
-    f.close()
+    f = None
 
-    f = open("samples.json", "a")
+    # Create the recv thread. Start on START command, exit on STOP command.
 
-    profClient.send_command("START")
-    
-    profClient.recv(f)
+    # Sit in a loop and wait for user commands
+    while True:
+        user_input = input("> ").upper()
+        if user_input == "CONNECT":
+            f = open("samples.json", "w")
+            profClient.connect()
+            profClient.get_mappings(f)
+            f.write(",\n\"samples\": [\n")
+            f.close()
 
-    f.close()
+        elif user_input == "START":
+            f = open("samples.json", "a")
+            profClient.send_command("START")
+            # TODO: Start this in a seperate thread
+            # recvThread = threading.Thread(target=profClient.recv_samples, args=(f))
 
-    f.append("}")
+            profClient.recv_samples(f)
+            # recvThread.start()
+
+        elif user_input == "STOP":
+            # Stop the recv thread and close file descriptor
+            profClient.send_command("STOP")
+            f.close()
+            # recvThread.join()
+
+        elif user_input == "EXIT":
+            f = open("samples.json", "a")
+            profClient.send_command("STOP")   
+            f.write("]\n}\n")
+            f.close()
+            os._exit(1)
+        
+        else: 
+            print("These are the following valid commands:\n")
+            print("\t1. \"CONNECT\" - This will attempt to connect to the supplied IP address and port. Connect will add the ")
+            print("\t2. \"START\" - This will command the seL4 profiler to start measurements and construct samples.json file.")
+            print("\t3. \"STOP\" - This will command the seL4 profiler to stop measurements.")
+            print("\t4. \"EXIT\" - This will command the seL4 profiler to stop measurements, close the json file and exit this program")
+
+
+
+
+
+
+
