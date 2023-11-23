@@ -39,7 +39,7 @@ class ProfilerClient:
         self.send_command("MAPPINGS")
         f.write("{\n")
         f.write("\"pd_mappings\": {\n")
-        data = self.socket.recv(1024).decode()
+        data = self.socket.recv(4096).decode()
         print(str(data))
         lines = str(data).split("\n")
         for line in lines:
@@ -72,6 +72,10 @@ class ProfilerClient:
                 global stop_recv
                 if stop_recv:
                     break
+                else:
+                    print("No data on socket")
+                    # Dummy command to refresh socket
+                    self.send_command("REFRESH")
 
     def recv_samples(self, f):
         # Start the samples section of the json
