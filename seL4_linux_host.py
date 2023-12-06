@@ -3,7 +3,7 @@ import sys
 import threading
 import os
 
-client_ip = "172.16.1.9"
+client_ip = "172.16.1.64"
 client_port = 1236
 
 stop_recv = 0
@@ -15,12 +15,21 @@ class ProfilerClient:
     will also recieve samples on this client from the seL4 profiler.
     """
 
-    def __init__(self, hostname, port):
-        self.hostname = hostname
+    def __init__(self, port):
+        self.hostname = None
         self.port = port
         self.socket = None
         self.recv_thread = None
         self.f = None
+
+    def set_ip(self, ip):
+        """
+        Set the IP address of the profiler client
+
+        Params:
+            ip: IP address we wish to connect to
+        """
+        self.hostname = ip
 
     def send_command(self, cmd):
         """
@@ -46,11 +55,18 @@ class ProfilerClient:
             content = line.split(":")
             f.write(f"\"{content[0]}\": {content[1]},\n")
         f.write("}")
+
     def connect(self):
+        #  Check if the user has set an ip address
+        if self.hostname is None:
+            print("Please set an IP address by typing: IP <ip_addr>")
+            return 1
+
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         
         try:
             self.socket.connect((self.hostname, self.port))
+            return 0
         except OSError:
             sys.stderr.write(f"Can't connect to {self.hostname} on port {repr(self.port)}"
                         + " ... invalid host or port?\n")
@@ -97,7 +113,7 @@ class ProfilerClient:
 
 if __name__ == "__main__":
     # Intially, we want to create client object
-    profClient = ProfilerClient(client_ip, client_port)
+    profClient = ProfilerClient(client_port)
     print("seL4 Profiler Network Client. Please enter command:")
 
     f = None
@@ -108,11 +124,12 @@ if __name__ == "__main__":
     while True:
         user_input = input("> ").upper()
         if user_input == "CONNECT":
-            f = open("samples.json", "w")
-            profClient.connect()
-            profClient.get_mappings(f)
-            f.write(",\n\"samples\": [\n")
-            f.close()
+            conn_ret = profClient.connect()
+            if conn_ret == 0:
+                f = open("samples.json", "w")
+                profClient.get_mappings(f)
+                f.write(",\n\"samples\": [\n")
+                f.close()
 
         elif user_input == "START":
             f = open("samples.json", "a")
@@ -135,6 +152,14 @@ if __name__ == "__main__":
             f.write("]\n}\n")
             f.close()
             os._exit(1)
+
+        elif user_input.startswith("IP"):
+            ip_arg = user_input.split(" ")
+            if len(ip_arg) != 2:
+                print("ERROR: Please supply IP address as argument")
+            else:
+                print(f"Setting IP address to {ip_arg[1]}")
+                profClient.set_ip(ip_arg[1])
         
         else: 
             print("These are the following valid commands (case-agnostic):\n")
