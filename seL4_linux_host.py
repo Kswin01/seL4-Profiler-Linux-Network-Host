@@ -2,8 +2,10 @@ import socket
 import sys
 import threading
 import os
+import struct
+# import pmu_sample_pb2
 
-client_ip = "172.16.1.9"
+client_ip = "172.16.1.87"
 client_port = 1236
 
 stop_recv = 0
@@ -66,7 +68,18 @@ class ProfilerClient:
             # receive data stream. it won't accept data packet greater than 1024 bytes
             # global stop_recv
             try:
-                data = self.socket.recv(1024).decode()
+                # we first want to get the len from the socket, then read the socket
+                # for the size len
+                raw_len = self.socket.recv(16).decode()
+                print(raw_len)
+                len = int(raw_len)
+                print(len)
+                # int_len = int.from_bytes(raw_len, 'little')
+                # len = socket.ntohl(int_len)
+                # dataToRead = struct.unpack("L", self.socket.recv(8))[0]    
+                # print(f"This is int_len: {int_len}")
+                # print(f"This is len: {len}")
+                data = self.socket.recv(len)
                 self.f.write(str(data))
             except socket.error:
                 global stop_recv
