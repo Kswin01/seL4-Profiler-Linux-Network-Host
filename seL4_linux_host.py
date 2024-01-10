@@ -3,11 +3,15 @@ import sys
 import threading
 import os
 import struct
-# import pmu_sample_pb2
+import pmu_sample_pb2
+import json
+from google.protobuf.json_format import MessageToJson
 
-client_ip = "172.16.1.87"
+client_ip = "172.16.1.72"
 client_port = 1236
 
+# To track if we have sent a message, to ensure json format is correct
+first_msg = 0
 stop_recv = 0
 
 class ProfilerClient:
@@ -70,17 +74,27 @@ class ProfilerClient:
             try:
                 # we first want to get the len from the socket, then read the socket
                 # for the size len
-                raw_len = self.socket.recv(16).decode()
-                print(raw_len)
+                raw_len = self.socket.recv(2).decode()
                 len = int(raw_len)
-                print(len)
                 # int_len = int.from_bytes(raw_len, 'little')
                 # len = socket.ntohl(int_len)
                 # dataToRead = struct.unpack("L", self.socket.recv(8))[0]    
                 # print(f"This is int_len: {int_len}")
                 # print(f"This is len: {len}")
+                global first_msg
+                if (first_msg == 1):
+                    self.f.write(",")
+                else:
+                    first_msg = 1
+
                 data = self.socket.recv(len)
-                self.f.write(str(data))
+                # Convert this data using protobuf
+                sample = pmu_sample_pb2.pmu_sample()
+
+                sample.ParseFromString(data)
+                
+                self.f.write(MessageToJson(sample))
+
             except socket.error:
                 global stop_recv
                 if stop_recv:
